@@ -6,6 +6,7 @@
 // - Running the projector with user-defined Apply function
 // - Atomic projection + checkpoint persistence using database transactions
 // - Restarting from the saved cursor without re-applying past events
+// - Projecting product tag events to enable product search by tags
 package main
 
 import (
@@ -23,15 +24,16 @@ import (
 )
 
 // Example event types
-type CardCreated struct {
-	CardID string `json:"card_id"`
-	UserID string `json:"user_id"`
-	Title  string `json:"title"`
+type TagAdded struct {
+	ProductID string `json:"product_id"`
+	Tag       string `json:"tag"`
+	UserID    string `json:"user_id"`
 }
 
-type CardUpdated struct {
-	CardID string `json:"card_id"`
-	Title  string `json:"title"`
+type TagRemoved struct {
+	ProductID string `json:"product_id"`
+	Tag       string `json:"tag"`
+	UserID    string `json:"user_id"`
 }
 
 func main() {
@@ -95,12 +97,15 @@ func main() {
 // createTables sets up our projection and checkpoint tables
 func createTables(ctx context.Context, db *sql.DB) error {
 	queries := []string{
-		`CREATE TABLE IF NOT EXISTS cards_latest (
-			card_id TEXT PRIMARY KEY,
-			user_id TEXT NOT NULL,
-			title TEXT NOT NULL,
-			updated_at TIMESTAMP NOT NULL DEFAULT NOW()
+		`CREATE TABLE IF NOT EXISTS product_tags (
+			product_id TEXT NOT NULL,
+			tag TEXT NOT NULL,
+			added_by TEXT NOT NULL,
+			added_at TIMESTAMP NOT NULL DEFAULT NOW(),
+			PRIMARY KEY (product_id, tag)
 		)`,
+		`CREATE INDEX IF NOT EXISTS idx_product_tags_tag ON product_tags(tag)`,
+		`CREATE INDEX IF NOT EXISTS idx_product_tags_product_id ON product_tags(product_id)`,
 		`CREATE TABLE IF NOT EXISTS projection_checkpoints (
 			projection_name TEXT PRIMARY KEY,
 			cursor_value BYTEA NOT NULL,
@@ -122,7 +127,7 @@ func loadCursor(ctx context.Context, db *sql.DB) (es.Cursor, error) {
 	var cursor []byte
 	err := db.QueryRowContext(ctx,
 		`SELECT cursor_value FROM projection_checkpoints WHERE projection_name = $1`,
-		"cards_latest",
+		"product_tags",
 	).Scan(&cursor)
 
 	if err == sql.ErrNoRows {
@@ -144,7 +149,7 @@ func saveCursorTx(ctx context.Context, tx *sql.Tx, cursor es.Cursor) error {
 		 VALUES ($1, $2, NOW())
 		 ON CONFLICT (projection_name) 
 		 DO UPDATE SET cursor_value = EXCLUDED.cursor_value, updated_at = NOW()`,
-		"cards_latest", []byte(cursor))
+		"product_tags", []byte(cursor))
 
 	if err != nil {
 		return fmt.Errorf("failed to save cursor: %w", err)
@@ -194,19 +199,19 @@ func createApplyFunc(db *sql.DB) projector.ApplyFunc {
 // projectEventTx projects a single event within a transaction
 func projectEventTx(ctx context.Context, tx *sql.Tx, envelope es.Envelope) error {
 	switch envelope.Type {
-	case "card.created":
-		var event CardCreated
+	case "product.tag_added":
+		var event TagAdded
 		if err := json.Unmarshal(envelope.Data, &event); err != nil {
-			return fmt.Errorf("failed to unmarshal CardCreated: %w", err)
+			return fmt.Errorf("failed to unmarshal TagAdded: %w", err)
 		}
-		return upsertCardTx(ctx, tx, event.CardID, event.UserID, event.Title)
+		return addProductTagTx(ctx, tx, event.ProductID, event.Tag, event.UserID)
 
-	case "card.updated":
-		var event CardUpdated
+	case "product.tag_removed":
+		var event TagRemoved
 		if err := json.Unmarshal(envelope.Data, &event); err != nil {
-			return fmt.Errorf("failed to unmarshal CardUpdated: %w", err)
+			return fmt.Errorf("failed to unmarshal TagRemoved: %w", err)
 		}
-		return updateCardTitleTx(ctx, tx, event.CardID, event.Title)
+		return removeProductTagTx(ctx, tx, event.ProductID, event.Tag)
 
 	default:
 		// Unknown event type - skip (be lenient)
@@ -215,31 +220,30 @@ func projectEventTx(ctx context.Context, tx *sql.Tx, envelope es.Envelope) error
 	}
 }
 
-// upsertCardTx creates or updates a card record
-func upsertCardTx(ctx context.Context, tx *sql.Tx, cardID, userID, title string) error {
+// addProductTagTx adds a tag to a product
+func addProductTagTx(ctx context.Context, tx *sql.Tx, productID, tag, userID string) error {
 	_, err := tx.ExecContext(ctx,
-		`INSERT INTO cards_latest (card_id, user_id, title, updated_at)
+		`INSERT INTO product_tags (product_id, tag, added_by, added_at)
 		 VALUES ($1, $2, $3, NOW())
-		 ON CONFLICT (card_id)
-		 DO UPDATE SET title = EXCLUDED.title, updated_at = NOW()`,
-		cardID, userID, title)
+		 ON CONFLICT (product_id, tag) DO NOTHING`,
+		productID, tag, userID)
 
 	if err != nil {
-		return fmt.Errorf("failed to upsert card: %w", err)
+		return fmt.Errorf("failed to add product tag: %w", err)
 	}
 
-	log.Printf("Upserted card: %s", cardID)
+	log.Printf("Added tag '%s' to product: %s", tag, productID)
 	return nil
 }
 
-// updateCardTitleTx updates just the title of an existing card
-func updateCardTitleTx(ctx context.Context, tx *sql.Tx, cardID, title string) error {
+// removeProductTagTx removes a tag from a product
+func removeProductTagTx(ctx context.Context, tx *sql.Tx, productID, tag string) error {
 	result, err := tx.ExecContext(ctx,
-		`UPDATE cards_latest SET title = $1, updated_at = NOW() WHERE card_id = $2`,
-		title, cardID)
+		`DELETE FROM product_tags WHERE product_id = $1 AND tag = $2`,
+		productID, tag)
 
 	if err != nil {
-		return fmt.Errorf("failed to update card title: %w", err)
+		return fmt.Errorf("failed to remove product tag: %w", err)
 	}
 
 	rowsAffected, err := result.RowsAffected()
@@ -248,9 +252,9 @@ func updateCardTitleTx(ctx context.Context, tx *sql.Tx, cardID, title string) er
 	}
 
 	if rowsAffected == 0 {
-		log.Printf("Warning: No card found with ID %s for title update", cardID)
+		log.Printf("Warning: No tag '%s' found for product %s to remove", tag, productID)
 	} else {
-		log.Printf("Updated card title: %s", cardID)
+		log.Printf("Removed tag '%s' from product: %s", tag, productID)
 	}
 
 	return nil
