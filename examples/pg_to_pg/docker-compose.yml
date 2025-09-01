@@ -1,0 +1,42 @@
+version: '3.8'
+
+services:
+  # Event Store Database
+  eventstore-db:
+    image: postgres:15-alpine
+    environment:
+      POSTGRES_DB: eventstore
+      POSTGRES_USER: eventstore_user
+      POSTGRES_PASSWORD: eventstore_pass
+    ports:
+      - "5432:5432"
+    volumes:
+      - eventstore_data:/var/lib/postgresql/data
+      - ./init-eventstore.sql:/docker-entrypoint-initdb.d/init-eventstore.sql
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U eventstore_user -d eventstore"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+  # Projection Database
+  projection-db:
+    image: postgres:15-alpine
+    environment:
+      POSTGRES_DB: projections
+      POSTGRES_USER: projection_user
+      POSTGRES_PASSWORD: projection_pass
+    ports:
+      - "5433:5432"
+    volumes:
+      - projection_data:/var/lib/postgresql/data
+      - ./init-projections.sql:/docker-entrypoint-initdb.d/init-projections.sql
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U projection_user -d projections"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+volumes:
+  eventstore_data:
+  projection_data:
