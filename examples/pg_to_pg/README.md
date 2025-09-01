@@ -63,16 +63,21 @@ CREATE INDEX idx_product_tags_product_id ON product_tags(product_id); -- Search 
 ### Using Makefile (Recommended)
 
 ```bash
-# Start databases and run full demo
+# Start databases and run a quick demo (10 seconds)
 make demo
 
 # Or step by step:
 make up          # Start databases  
-make run         # Run projector
+make run-once    # Run projector for 10 seconds
 make producer    # Add more events
-make run         # Run projector again
+make run-once    # Run projector for 10 seconds again
 make down        # Stop databases
+
+# For continuous processing (production-like):
+make run         # Run projector continuously (Press Ctrl+C to stop)
 ```
+
+**Note:** The projector runs continuously by design, polling for new events every 2 seconds. Use `run-once` for demos or `run` for production scenarios where you want continuous processing.
 
 ### Manual Steps
 
@@ -88,17 +93,29 @@ This creates:
 
 ### 2. Run the projector
 
+#### For Demo/Testing (runs for 10 seconds):
 ```bash
-go run main.go
+make run-once
+```
+
+#### For Continuous Processing (production-like):
+```bash
+make run  # Press Ctrl+C to stop
+```
+
+#### Or manually:
+```bash
+go run cmd/projector/main.go  # Runs continuously until Ctrl+C
 ```
 
 The projector will:
 1. Connect to both databases
 2. Load checkpoint (starts from beginning on first run)
-3. Fetch events from the event store
+3. Fetch events from the event store in batches
 4. Project them to the `product_tags` table
 5. Save checkpoint atomically
-6. Display results
+6. **Continue polling for new events every 2 seconds** (until stopped)
+7. Display results when stopped
 
 ### 3. (Optional) Add more events
 
@@ -110,7 +127,9 @@ make producer
 cd cmd/producer && go run main.go
 ```
 
-This adds new events to the event store that you can then project by running the main projector again.
+This adds new events to the event store that you can then project by running the projector again.
+
+**Note:** In a production environment, the projector would typically run continuously as a service, automatically processing new events as they arrive.
 
 ### 4. View the results
 
@@ -133,6 +152,25 @@ Checkpoint: 7
 Example tag-based searches:
   Products with 'electronics' tag: [product-123 product-789]
 ```
+
+## Continuous Processing Behavior
+
+**Important:** The projector is designed for continuous operation and does NOT exit automatically. It:
+
+- ✅ Processes all available events in batches
+- ✅ Saves checkpoints after each batch
+- ✅ **Continues polling for new events every 2 seconds**
+- ✅ Only stops when explicitly interrupted (Ctrl+C) or context cancelled
+
+This design is typical for production event sourcing systems where projectors run as long-lived services.
+
+### For Demo/Development:
+- Use `make run-once` for quick testing (auto-stops after 10 seconds)
+- Use `make demo` for a complete demonstration
+
+### For Production:
+- Use `make run` and manage the process lifecycle with your deployment system
+- The projector will continuously process new events as they arrive
 
 ## Files
 

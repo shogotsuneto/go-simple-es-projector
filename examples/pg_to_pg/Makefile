@@ -18,8 +18,14 @@ down: ## Stop and remove containers
 clean: ## Stop containers and remove volumes
 	docker-compose down -v
 
-run: build ## Run the projector
+run: build ## Run the projector (runs continuously until stopped with Ctrl+C)
+	@echo "Starting projector... (Press Ctrl+C to stop)"
 	./projector
+
+run-once: build ## Run the projector for 10 seconds then stop
+	@echo "Running projector for 10 seconds..."
+	timeout 10 ./projector || true
+	@echo "Projector stopped after 10 seconds"
 
 producer: build ## Run the event producer
 	./producer
@@ -35,8 +41,10 @@ logs: ## Show database logs
 	docker-compose logs -f
 
 # Complete workflow targets
-demo: up wait-db run ## Full demo: start databases, wait, then run projector
-	@echo "Demo completed! Try 'make producer' then 'make run' again to see new events."
+demo: up wait-db run-once ## Full demo: start databases, wait, then run projector for 10 seconds
+	@echo "Demo completed! The projector processed available events."
+	@echo "Try 'make producer' to add more events, then 'make run-once' to process them."
+	@echo "Or use 'make run' to start the projector continuously."
 
 wait-db: ## Wait for databases to be ready
 	@echo "Waiting for databases to be healthy..."
@@ -44,7 +52,7 @@ wait-db: ## Wait for databases to be ready
 	@timeout 60 bash -c 'until docker-compose exec -T projection-db pg_isready -U projection_user -d projections >/dev/null 2>&1; do sleep 1; done'
 	@echo "Databases are healthy!"
 
-full-cycle: up wait-db run producer run ## Complete cycle: start, project initial data, add events, project again
+full-cycle: up wait-db run-once producer run-once ## Complete cycle: start, project initial data, add events, project again
 
 # Development targets  
 dev-reset: clean up wait-db ## Reset everything and start fresh
