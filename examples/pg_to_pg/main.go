@@ -20,6 +20,7 @@ import (
 
 	"github.com/shogotsuneto/go-simple-es-projector"
 	es "github.com/shogotsuneto/go-simple-eventstore"
+	"github.com/shogotsuneto/go-simple-eventstore/postgres"
 	_ "github.com/lib/pq" // PostgreSQL driver
 )
 
@@ -37,38 +38,47 @@ type TagRemoved struct {
 }
 
 func main() {
-	// Example usage - in real code, get from environment/config
-	dbURL := os.Getenv("DATABASE_URL")
-	if dbURL == "" {
-		dbURL = "postgres://user:password@localhost/projector_example?sslmode=disable"
-		log.Printf("Using default DATABASE_URL: %s", dbURL)
+	// Environment variables for database connections
+	eventstoreURL := os.Getenv("EVENTSTORE_URL")
+	if eventstoreURL == "" {
+		eventstoreURL = "postgres://eventstore_user:eventstore_pass@localhost:5432/eventstore?sslmode=disable"
+		log.Printf("Using default EVENTSTORE_URL: %s", eventstoreURL)
 	}
 
-	db, err := sql.Open("postgres", dbURL)
+	projectionURL := os.Getenv("PROJECTION_URL")
+	if projectionURL == "" {
+		projectionURL = "postgres://projection_user:projection_pass@localhost:5433/projections?sslmode=disable"
+		log.Printf("Using default PROJECTION_URL: %s", projectionURL)
+	}
+
+	// Connect to projection database
+	projectionDB, err := sql.Open("postgres", projectionURL)
 	if err != nil {
-		log.Fatalf("Failed to open database: %v", err)
+		log.Fatalf("Failed to open projection database: %v", err)
 	}
-	defer db.Close()
+	defer projectionDB.Close()
 
-	// Verify connection
-	if err := db.Ping(); err != nil {
-		log.Printf("Database connection failed: %v", err)
-		log.Printf("Skipping example - requires PostgreSQL")
+	// Verify projection database connection
+	if err := projectionDB.Ping(); err != nil {
+		log.Printf("Projection database connection failed: %v", err)
+		log.Printf("Skipping example - requires PostgreSQL. Run: docker-compose up -d")
 		return
 	}
 
-	// Create tables (in real code, use migrations)
-	if err := createTables(context.Background(), db); err != nil {
-		log.Fatalf("Failed to create tables: %v", err)
+	// Create projection tables (in real code, use migrations)
+	if err := createProjectionTables(context.Background(), projectionDB); err != nil {
+		log.Fatalf("Failed to create projection tables: %v", err)
 	}
 
-	// Create event source (assuming go-simple-eventstore has a PostgreSQL consumer)
-	// Note: This is conceptual - actual implementation depends on go-simple-eventstore
-	src := createEventSource(db)
+	// Create event source using go-simple-eventstore
+	src, err := createEventConsumer(eventstoreURL)
+	if err != nil {
+		log.Fatalf("Failed to create event consumer: %v", err)
+	}
 
 	// Load starting cursor from our checkpoint table
 	ctx := context.Background()
-	cursor, err := loadCursor(ctx, db)
+	cursor, err := loadCursor(ctx, projectionDB)
 	if err != nil {
 		log.Fatalf("Failed to load cursor: %v", err)
 	}
@@ -77,11 +87,12 @@ func main() {
 
 	// Create and configure the runner
 	runner := &projector.Runner{
-		Source:    src,
-		Start:     cursor,
-		BatchSize: 100,
-		IdleSleep: 1 * time.Second,
-		Apply:     createApplyFunc(db),
+		Source:     src,
+		Start:      cursor,
+		BatchSize:  10, // Small batches for demo
+		IdleSleep:  2 * time.Second,
+		MaxBatches: 3, // Run limited batches for demo
+		Apply:      createApplyFunc(projectionDB),
 		Logger: func(msg string, kv ...any) {
 			log.Printf("[RUNNER] %s %v", msg, kv)
 		},
@@ -92,10 +103,17 @@ func main() {
 	if err := runner.Run(ctx); err != nil {
 		log.Fatalf("Projector failed: %v", err)
 	}
+
+	log.Println("Projection completed successfully!")
+
+	// Show results
+	if err := showResults(ctx, projectionDB); err != nil {
+		log.Printf("Failed to show results: %v", err)
+	}
 }
 
-// createTables sets up our projection and checkpoint tables
-func createTables(ctx context.Context, db *sql.DB) error {
+// createProjectionTables sets up our projection and checkpoint tables
+func createProjectionTables(ctx context.Context, db *sql.DB) error {
 	queries := []string{
 		`CREATE TABLE IF NOT EXISTS product_tags (
 			product_id TEXT NOT NULL,
@@ -260,30 +278,81 @@ func removeProductTagTx(ctx context.Context, tx *sql.Tx, productID, tag string) 
 	return nil
 }
 
-// createEventSource creates a mock event source for demonstration
-// In real code, this would use the actual go-simple-eventstore PostgreSQL consumer
-func createEventSource(db *sql.DB) es.Consumer {
-	return &mockConsumer{db: db}
+// createEventConsumer creates a real event consumer using go-simple-eventstore
+func createEventConsumer(eventstoreURL string) (es.Consumer, error) {
+	config := postgres.Config{
+		ConnectionString: eventstoreURL,
+		TableName:        "events",
+	}
+
+	consumer, err := postgres.NewPostgresEventConsumer(config)
+	if err != nil {
+		return nil, fmt.Errorf("failed to create postgres event consumer: %w", err)
+	}
+
+	return consumer, nil
 }
 
-// mockConsumer implements es.Consumer for demonstration purposes
-type mockConsumer struct {
-	db     *sql.DB
-	events []es.Envelope
-	cursor int
-}
-
-func (m *mockConsumer) Fetch(ctx context.Context, cursor es.Cursor, limit int) ([]es.Envelope, es.Cursor, error) {
-	// In real implementation, this would query the events table
-	// For demo, return empty batches to show idle behavior
-	log.Printf("Mock consumer fetch called with cursor=%s, limit=%d", cursor, limit)
+// showResults displays the projected data to demonstrate the working system
+func showResults(ctx context.Context, db *sql.DB) error {
+	log.Println("\n=== PROJECTION RESULTS ===")
 	
-	// Simulate no new events
-	return []es.Envelope{}, cursor, nil
-}
+	// Show all product tags
+	rows, err := db.QueryContext(ctx, 
+		`SELECT product_id, tag, added_by, added_at 
+		 FROM product_tags 
+		 ORDER BY product_id, tag`)
+	if err != nil {
+		return fmt.Errorf("failed to query product tags: %w", err)
+	}
+	defer rows.Close()
 
-func (m *mockConsumer) Commit(ctx context.Context, cursor es.Cursor) error {
-	// For PostgreSQL, this is typically a no-op since events are already persisted
-	log.Printf("Mock consumer commit called with cursor=%s", cursor)
+	log.Println("Product Tags:")
+	for rows.Next() {
+		var productID, tag, addedBy string
+		var addedAt time.Time
+		if err := rows.Scan(&productID, &tag, &addedBy, &addedAt); err != nil {
+			return fmt.Errorf("failed to scan row: %w", err)
+		}
+		log.Printf("  %s -> %s (by %s at %s)", productID, tag, addedBy, addedAt.Format("15:04:05"))
+	}
+
+	// Show checkpoint
+	var cursor []byte
+	err = db.QueryRowContext(ctx,
+		`SELECT cursor_value FROM projection_checkpoints WHERE projection_name = $1`,
+		"product_tags",
+	).Scan(&cursor)
+	
+	if err == sql.ErrNoRows {
+		log.Println("Checkpoint: None")
+	} else if err != nil {
+		return fmt.Errorf("failed to load checkpoint: %w", err)
+	} else {
+		log.Printf("Checkpoint: %s", string(cursor))
+	}
+
+	// Show example queries
+	log.Println("\nExample tag-based searches:")
+	
+	// Products with 'electronics' tag
+	var productIDs []string
+	rows, err = db.QueryContext(ctx, 
+		`SELECT DISTINCT product_id FROM product_tags WHERE tag = $1`, 
+		"electronics")
+	if err != nil {
+		return fmt.Errorf("failed to query electronics products: %w", err)
+	}
+	defer rows.Close()
+	
+	for rows.Next() {
+		var productID string
+		if err := rows.Scan(&productID); err != nil {
+			return fmt.Errorf("failed to scan product ID: %w", err)
+		}
+		productIDs = append(productIDs, productID)
+	}
+	log.Printf("  Products with 'electronics' tag: %v", productIDs)
+
 	return nil
 }
