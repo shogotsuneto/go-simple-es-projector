@@ -80,11 +80,11 @@ func createTestEvent(eventID string, data string) es.Envelope {
 	}
 }
 
-func TestRunnerDefaults(t *testing.T) {
+func TestWorkerDefaults(t *testing.T) {
 	consumer := newFakeConsumer()
 	applied := []appliedBatch{}
 
-	runner := &Runner{
+	worker := &Worker{
 		Source: consumer,
 		Start:  es.Cursor("start"),
 		Apply: func(ctx context.Context, batch []es.Envelope, next es.Cursor) error {
@@ -102,7 +102,7 @@ func TestRunnerDefaults(t *testing.T) {
 	consumer.AddBatch(events, es.Cursor("cursor1"))
 
 	ctx := context.Background()
-	err := runner.Run(ctx)
+	err := worker.Run(ctx)
 
 	if err != nil {
 		t.Fatalf("expected no error, got %v", err)
@@ -143,10 +143,10 @@ func TestRunnerDefaults(t *testing.T) {
 	}
 }
 
-func TestRunnerCustomBatchSize(t *testing.T) {
+func TestWorkerCustomBatchSize(t *testing.T) {
 	consumer := newFakeConsumer()
 
-	runner := &Runner{
+	worker := &Worker{
 		Source:     consumer,
 		Start:      es.Cursor("start"),
 		BatchSize:  100,
@@ -161,7 +161,7 @@ func TestRunnerCustomBatchSize(t *testing.T) {
 	consumer.AddBatch(events, es.Cursor("cursor1"))
 
 	ctx := context.Background()
-	err := runner.Run(ctx)
+	err := worker.Run(ctx)
 
 	if err != nil {
 		t.Fatalf("expected no error, got %v", err)
@@ -176,12 +176,12 @@ func TestRunnerCustomBatchSize(t *testing.T) {
 	}
 }
 
-func TestRunnerFetchError(t *testing.T) {
+func TestWorkerFetchError(t *testing.T) {
 	consumer := newFakeConsumer()
 	expectedErr := errors.New("fetch failed")
 	consumer.SetFetchError(expectedErr)
 
-	runner := &Runner{
+	worker := &Worker{
 		Source: consumer,
 		Start:  es.Cursor("start"),
 		Apply: func(ctx context.Context, batch []es.Envelope, next es.Cursor) error {
@@ -191,18 +191,18 @@ func TestRunnerFetchError(t *testing.T) {
 	}
 
 	ctx := context.Background()
-	err := runner.Run(ctx)
+	err := worker.Run(ctx)
 
 	if err != expectedErr {
 		t.Errorf("expected fetch error %v, got %v", expectedErr, err)
 	}
 }
 
-func TestRunnerApplyError(t *testing.T) {
+func TestWorkerApplyError(t *testing.T) {
 	consumer := newFakeConsumer()
 	expectedErr := errors.New("apply failed")
 
-	runner := &Runner{
+	worker := &Worker{
 		Source: consumer,
 		Start:  es.Cursor("start"),
 		Apply: func(ctx context.Context, batch []es.Envelope, next es.Cursor) error {
@@ -215,7 +215,7 @@ func TestRunnerApplyError(t *testing.T) {
 	consumer.AddBatch(events, es.Cursor("cursor1"))
 
 	ctx := context.Background()
-	err := runner.Run(ctx)
+	err := worker.Run(ctx)
 
 	if err != expectedErr {
 		t.Errorf("expected apply error %v, got %v", expectedErr, err)
@@ -227,13 +227,13 @@ func TestRunnerApplyError(t *testing.T) {
 	}
 }
 
-func TestRunnerCommitError(t *testing.T) {
+func TestWorkerCommitError(t *testing.T) {
 	consumer := newFakeConsumer()
 	expectedErr := errors.New("commit failed")
 	consumer.SetCommitError(expectedErr)
 
 	applied := []appliedBatch{}
-	runner := &Runner{
+	worker := &Worker{
 		Source: consumer,
 		Start:  es.Cursor("start"),
 		Apply: func(ctx context.Context, batch []es.Envelope, next es.Cursor) error {
@@ -247,7 +247,7 @@ func TestRunnerCommitError(t *testing.T) {
 	consumer.AddBatch(events, es.Cursor("cursor1"))
 
 	ctx := context.Background()
-	err := runner.Run(ctx)
+	err := worker.Run(ctx)
 
 	if err != expectedErr {
 		t.Errorf("expected commit error %v, got %v", expectedErr, err)
@@ -259,10 +259,10 @@ func TestRunnerCommitError(t *testing.T) {
 	}
 }
 
-func TestRunnerContextCancellation(t *testing.T) {
+func TestWorkerContextCancellation(t *testing.T) {
 	consumer := newFakeConsumer()
 
-	runner := &Runner{
+	worker := &Worker{
 		Source:    consumer,
 		Start:     es.Cursor("start"),
 		IdleSleep: 50 * time.Millisecond, // Short sleep for faster test
@@ -271,7 +271,7 @@ func TestRunnerContextCancellation(t *testing.T) {
 		},
 	}
 
-	// No batches added, so runner will idle
+	// No batches added, so worker will idle
 
 	ctx, cancel := context.WithCancel(context.Background())
 	
@@ -281,18 +281,18 @@ func TestRunnerContextCancellation(t *testing.T) {
 		cancel()
 	}()
 
-	err := runner.Run(ctx)
+	err := worker.Run(ctx)
 
 	if err != context.Canceled {
 		t.Errorf("expected context.Canceled, got %v", err)
 	}
 }
 
-func TestRunnerMaxBatches(t *testing.T) {
+func TestWorkerMaxBatches(t *testing.T) {
 	consumer := newFakeConsumer()
 	applied := []appliedBatch{}
 
-	runner := &Runner{
+	worker := &Worker{
 		Source:     consumer,
 		Start:      es.Cursor("start"),
 		MaxBatches: 2, // Process only 2 batches
@@ -308,7 +308,7 @@ func TestRunnerMaxBatches(t *testing.T) {
 	consumer.AddBatch([]es.Envelope{createTestEvent("3", "event3")}, es.Cursor("cursor3"))
 
 	ctx := context.Background()
-	err := runner.Run(ctx)
+	err := worker.Run(ctx)
 
 	if err != nil {
 		t.Fatalf("expected no error, got %v", err)
@@ -328,11 +328,11 @@ func TestRunnerMaxBatches(t *testing.T) {
 	}
 }
 
-func TestRunnerLogger(t *testing.T) {
+func TestWorkerLogger(t *testing.T) {
 	consumer := newFakeConsumer()
 	logs := []logEntry{}
 
-	runner := &Runner{
+	worker := &Worker{
 		Source:     consumer,
 		Start:      es.Cursor("start"),
 		MaxBatches: 1,
@@ -348,7 +348,7 @@ func TestRunnerLogger(t *testing.T) {
 	consumer.AddBatch([]es.Envelope{createTestEvent("1", "event1")}, es.Cursor("cursor1"))
 
 	ctx := context.Background()
-	err := runner.Run(ctx)
+	err := worker.Run(ctx)
 
 	if err != nil {
 		t.Fatalf("expected no error, got %v", err)
@@ -362,20 +362,20 @@ func TestRunnerLogger(t *testing.T) {
 	// Check that the starting log is present
 	found := false
 	for _, log := range logs {
-		if log.msg == "runner starting" {
+		if log.msg == "worker starting" {
 			found = true
 			break
 		}
 	}
 	if !found {
-		t.Error("expected 'runner starting' log entry")
+		t.Error("expected 'worker starting' log entry")
 	}
 }
 
-func TestRunnerNilLogger(t *testing.T) {
+func TestWorkerNilLogger(t *testing.T) {
 	consumer := newFakeConsumer()
 
-	runner := &Runner{
+	worker := &Worker{
 		Source:     consumer,
 		Start:      es.Cursor("start"),
 		MaxBatches: 1,
@@ -389,7 +389,7 @@ func TestRunnerNilLogger(t *testing.T) {
 	consumer.AddBatch([]es.Envelope{createTestEvent("1", "event1")}, es.Cursor("cursor1"))
 
 	ctx := context.Background()
-	err := runner.Run(ctx)
+	err := worker.Run(ctx)
 
 	if err != nil {
 		t.Fatalf("expected no error with nil logger, got %v", err)

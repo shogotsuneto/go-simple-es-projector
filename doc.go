@@ -1,4 +1,4 @@
-// Package projector provides a minimal event runner that repeatedly pulls events
+// Package projector provides a minimal event worker that repeatedly pulls events
 // from an event source and invokes user-provided projection logic.
 //
 // Users fully own:
@@ -6,7 +6,7 @@
 //   - whether to make projection + checkpoint atomic (e.g., a DB transaction)
 //   - any DB/driver choices (database/sql, pgx, DynamoDB SDK, etc.)
 //
-// The Runner is generic; users provide Apply functions and checkpoint storage.
+// The Worker is generic; users provide Apply functions and checkpoint storage.
 // Any transactional atomicity is user-managed.
 // Delivery is at-least-once; Apply must be idempotent.
 //

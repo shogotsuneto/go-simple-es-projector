@@ -85,8 +85,8 @@ func main() {
 
 	log.Printf("Starting projection from cursor: %s", cursor)
 
-	// Create and configure the runner
-	runner := &projector.Runner{
+	// Create and configure the worker
+	worker := &projector.Worker{
 		Source:     src,
 		Start:      cursor,
 		BatchSize:  10, // Small batches for demo
@@ -94,13 +94,13 @@ func main() {
 		MaxBatches: 3, // Run limited batches for demo
 		Apply:      createApplyFunc(projectionDB),
 		Logger: func(msg string, kv ...any) {
-			log.Printf("[RUNNER] %s %v", msg, kv)
+			log.Printf("[WORKER] %s %v", msg, kv)
 		},
 	}
 
 	// Run the projector
 	log.Println("Starting projector...")
-	if err := runner.Run(ctx); err != nil {
+	if err := worker.Run(ctx); err != nil {
 		log.Fatalf("Projector failed: %v", err)
 	}
 

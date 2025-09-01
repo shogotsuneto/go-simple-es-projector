@@ -1,6 +1,6 @@
 # go-simple-es-projector
 
-A minimal event runner that repeatedly pulls events from an event source and invokes **user-provided projection logic**. 
+A minimal event worker that repeatedly pulls events from an event source and invokes **user-provided projection logic**. 
 
 ## Responsibilities
 
@@ -9,7 +9,7 @@ A minimal event runner that repeatedly pulls events from an event source and inv
 - whether to make projection + checkpoint **atomic** (e.g., a DB transaction)
 - any **DB/driver choices** (`database/sql`, `pgx`, DynamoDB SDK, etc.)
 
-**The runner is generic; users provide Apply functions and checkpoint storage.**  
+**The worker is generic; users provide Apply functions and checkpoint storage.**  
 **Any transactional atomicity is user-managed.**  
 **Delivery is at-least-once; Apply must be idempotent.**
 
@@ -33,10 +33,10 @@ import (
 )
 
 // Users implement Apply to project events AND persist 'next' cursor.
-// Apply must be idempotent; return an error to have the runner stop/retry.
+// Apply must be idempotent; return an error to have the worker stop/retry.
 type ApplyFunc func(ctx context.Context, batch []es.Envelope, next es.Cursor) error
 
-type Runner struct {
+type Worker struct {
     Source     es.Consumer   // event source (Postgres, DynamoDB Streams, Kafka…)
     Apply      ApplyFunc     // user projection + checkpoint
     Start      es.Cursor     // starting cursor (user loads from their store)
@@ -48,7 +48,7 @@ type Runner struct {
 
 // Run pulls events and calls Apply with 'next' cursor after each batch.
 // Flow: Fetch -> Apply (user persists data+cursor) -> Commit (source) -> advance.
-func (r *Runner) Run(ctx context.Context) error
+func (w *Worker) Run(ctx context.Context) error
 ```
 
 ## Behavior
@@ -59,7 +59,7 @@ func (r *Runner) Run(ctx context.Context) error
    - if error → return error
    - if `len(batch)==0` → sleep `IdleSleep`, continue
    - `err := Apply(ctx, batch, next)` (user persists read model + checkpoint; can be atomic)
-   - if error → return error (runner doesn't swallow apply failures)
+   - if error → return error (worker doesn't swallow apply failures)
    - `err := Source.Commit(ctx, next)` (Kafka may use this; others can no-op)
    - `cursor = next`
    - stop on `ctx.Done()` or `MaxBatches` reached
@@ -73,7 +73,7 @@ db  := mustOpenPostgres() // *sql.DB is goroutine-safe
 src := pgconsumer.New(db, pgconsumer.WithTable("events")) // from go-simple-eventstore
 cur := loadCursorFromMyTable(ctx, db) // user-defined
 
-r := &projector.Runner{
+r := &projector.Worker{
   Source:    src,
   Start:     cur,
   BatchSize: 500,
@@ -108,7 +108,7 @@ func (a *App) Apply(ctx context.Context, batch []es.Envelope, next es.Cursor) er
 }
 
 app := &App{DB: db}
-r := &projector.Runner{ Source: src, Start: cur, Apply: app.Apply }
+r := &projector.Worker{ Source: src, Start: cur, Apply: app.Apply }
 _ = r.Run(ctx)
 ```
 
@@ -119,7 +119,7 @@ dynamo := dynamodb.NewFromConfig(cfg)
 src    := ddbstreams.NewConsumer(cfg, /* adapter opts */)
 cur    := loadCursorFromDynamo(ctx, dynamo, "checkpoints-table")
 
-r := &projector.Runner{
+r := &projector.Worker{
   Source: src,
   Start:  cur,
   Apply: func(ctx context.Context, batch []es.Envelope, next es.Cursor) error {
@@ -144,7 +144,7 @@ The `Commit` method on the source is called after `Apply` succeeds:
 
 - **At-least-once delivery**: Apply must be idempotent
 - **User-managed atomicity**: You control transactions and consistency
-- **Generic runner**: Works with any storage backend
+- **Generic worker**: Works with any storage backend
 - **Context-aware**: Respects cancellation and timeouts
 - **Configurable**: Batch sizes, idle sleep, max batches for testing
 
