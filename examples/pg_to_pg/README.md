@@ -132,34 +132,37 @@ You can query the projected data directly from PostgreSQL using Docker:
 
 ```bash
 # Connect to the projection database
-docker exec -it pg_to_pg-projection-db-1 psql -U projection_user -d projections
+docker compose exec -it projection-db psql -U projection_user -d projections
 
 # Or in one command:
-docker exec -it pg_to_pg-projection-db-1 psql -U projection_user -d projections -c "
+docker compose exec -it projection-db psql -U projection_user -d projections -c "
 SELECT product_id, tag, added_by, added_at 
 FROM product_tags 
 ORDER BY product_id, tag;
 "
 
 # Check projection checkpoint
-docker exec -it pg_to_pg-projection-db-1 psql -U projection_user -d projections -c "
+docker compose exec -it projection-db psql -U projection_user -d projections -c "
 SELECT projection_name, cursor_value 
 FROM projection_checkpoints;
 "
 
 # Example tag-based searches
-docker exec -it pg_to_pg-projection-db-1 psql -U projection_user -d projections -c "
+docker compose exec -it projection-db psql -U projection_user -d projections -c "
 SELECT DISTINCT product_id 
 FROM product_tags 
 WHERE tag = 'electronics';
 "
 
 # Show products with multiple tags
-docker exec -it pg_to_pg-projection-db-1 psql -U projection_user -d projections -c "
+docker compose exec -it projection-db psql -U projection_user -d projections -c "
 SELECT product_id, array_agg(tag) as tags 
 FROM product_tags 
 GROUP BY product_id;
 "
+
+# Connect to Event Store database
+docker compose exec -it eventstore-db psql -U eventstore_user -d eventstore
 ```
 
 Example output:
@@ -261,5 +264,5 @@ ON CONFLICT (projection_name) DO UPDATE SET cursor_value = EXCLUDED.cursor_value
 ## Cleanup
 
 ```bash
-docker-compose down -v  # Remove containers and volumes
+docker-compose down -v  # Or, make clean
 ```
