@@ -20,7 +20,6 @@ type Worker struct {
 	Start      es.Cursor     // starting cursor (user loads from their store)
 	BatchSize  int           // default: 512
 	IdleSleep  time.Duration // default: 200ms between empty polls
-	MaxBatches int           // 0 = unlimited (useful for tests/cron)
 	Logger     func(msg string, kv ...any) // optional, nil-safe
 }
 
@@ -39,9 +38,8 @@ func (w *Worker) Run(ctx context.Context) error {
 	}
 
 	cursor := w.Start
-	batchCount := 0
-
-	w.logf("worker starting", "batchSize", batchSize, "idleSleep", idleSleep, "maxBatches", w.MaxBatches)
+	
+	w.logf("worker starting", "batchSize", batchSize, "idleSleep", idleSleep)
 
 	for {
 		// Check context cancellation
@@ -50,12 +48,6 @@ func (w *Worker) Run(ctx context.Context) error {
 			w.logf("worker stopped due to context cancellation")
 			return ctx.Err()
 		default:
-		}
-
-		// Check MaxBatches limit
-		if w.MaxBatches > 0 && batchCount >= w.MaxBatches {
-			w.logf("worker stopped after reaching MaxBatches", "maxBatches", w.MaxBatches, "processed", batchCount)
-			return nil
 		}
 
 		// Fetch batch from source
@@ -97,11 +89,10 @@ func (w *Worker) Run(ctx context.Context) error {
 			return err
 		}
 
-		// Advance cursor and increment batch count
+		// Advance cursor
 		cursor = next
-		batchCount++
 
-		w.logf("batch processed", "batchCount", batchCount, "cursorAdvanced", true)
+		w.logf("batch processed", "cursorAdvanced", true)
 	}
 }
 

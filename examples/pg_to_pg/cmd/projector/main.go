@@ -87,12 +87,11 @@ func main() {
 
 	// Create and configure the worker
 	worker := &projector.Worker{
-		Source:     src,
-		Start:      cursor,
-		BatchSize:  10, // Small batches for demo
-		IdleSleep:  2 * time.Second,
-		MaxBatches: 3, // Run limited batches for demo
-		Apply:      createApplyFunc(projectionDB),
+		Source:    src,
+		Start:     cursor,
+		BatchSize: 10, // Small batches for demo
+		IdleSleep: 2 * time.Second,
+		Apply:     createApplyFunc(projectionDB),
 		Logger: func(msg string, kv ...any) {
 			log.Printf("[WORKER] %s %v", msg, kv)
 		},

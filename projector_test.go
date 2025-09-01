@@ -91,26 +91,29 @@ func TestWorkerDefaults(t *testing.T) {
 			applied = append(applied, appliedBatch{batch: batch, cursor: next})
 			return nil
 		},
-		MaxBatches: 1, // Process only one batch for this test
 	}
 
-	// Add one batch of events
+	// Add one batch of events, then consumer will return empty batches
 	events := []es.Envelope{
 		createTestEvent("1", "event1"),
 		createTestEvent("2", "event2"),
 	}
 	consumer.AddBatch(events, es.Cursor("cursor1"))
 
-	ctx := context.Background()
+	// Use context with timeout to stop the worker after processing
+	ctx, cancel := context.WithTimeout(context.Background(), 100*time.Millisecond)
+	defer cancel()
+	
 	err := worker.Run(ctx)
 
-	if err != nil {
-		t.Fatalf("expected no error, got %v", err)
+	// Should stop due to context timeout (expected behavior)
+	if err != context.DeadlineExceeded {
+		t.Fatalf("expected context.DeadlineExceeded, got %v", err)
 	}
 
 	// Verify defaults were applied
-	if len(consumer.fetchCalls) != 1 {
-		t.Fatalf("expected 1 fetch call, got %d", len(consumer.fetchCalls))
+	if len(consumer.fetchCalls) < 1 {
+		t.Fatalf("expected at least 1 fetch call, got %d", len(consumer.fetchCalls))
 	}
 
 	fetchCall := consumer.fetchCalls[0]
@@ -147,24 +150,27 @@ func TestWorkerCustomBatchSize(t *testing.T) {
 	consumer := newFakeConsumer()
 
 	worker := &Worker{
-		Source:     consumer,
-		Start:      es.Cursor("start"),
-		BatchSize:  100,
-		MaxBatches: 1,
+		Source:    consumer,
+		Start:     es.Cursor("start"),
+		BatchSize: 100,
 		Apply: func(ctx context.Context, batch []es.Envelope, next es.Cursor) error {
 			return nil
 		},
 	}
 
-	// Add a batch with events to avoid infinite loop
+	// Add a batch with events, then consumer will return empty batches
 	events := []es.Envelope{createTestEvent("1", "event1")}
 	consumer.AddBatch(events, es.Cursor("cursor1"))
 
-	ctx := context.Background()
+	// Use context with timeout to stop the worker after processing
+	ctx, cancel := context.WithTimeout(context.Background(), 100*time.Millisecond)
+	defer cancel()
+	
 	err := worker.Run(ctx)
 
-	if err != nil {
-		t.Fatalf("expected no error, got %v", err)
+	// Should stop due to context timeout (expected behavior)
+	if err != context.DeadlineExceeded {
+		t.Fatalf("expected context.DeadlineExceeded, got %v", err)
 	}
 
 	if len(consumer.fetchCalls) < 1 {
@@ -288,54 +294,13 @@ func TestWorkerContextCancellation(t *testing.T) {
 	}
 }
 
-func TestWorkerMaxBatches(t *testing.T) {
-	consumer := newFakeConsumer()
-	applied := []appliedBatch{}
-
-	worker := &Worker{
-		Source:     consumer,
-		Start:      es.Cursor("start"),
-		MaxBatches: 2, // Process only 2 batches
-		Apply: func(ctx context.Context, batch []es.Envelope, next es.Cursor) error {
-			applied = append(applied, appliedBatch{batch: batch, cursor: next})
-			return nil
-		},
-	}
-
-	// Add 3 batches but only 2 should be processed
-	consumer.AddBatch([]es.Envelope{createTestEvent("1", "event1")}, es.Cursor("cursor1"))
-	consumer.AddBatch([]es.Envelope{createTestEvent("2", "event2")}, es.Cursor("cursor2"))
-	consumer.AddBatch([]es.Envelope{createTestEvent("3", "event3")}, es.Cursor("cursor3"))
-
-	ctx := context.Background()
-	err := worker.Run(ctx)
-
-	if err != nil {
-		t.Fatalf("expected no error, got %v", err)
-	}
-
-	// Should have processed exactly 2 batches
-	if len(applied) != 2 {
-		t.Errorf("expected 2 applied batches, got %d", len(applied))
-	}
-
-	// Verify correct cursors progression
-	if string(applied[0].cursor) != "cursor1" {
-		t.Errorf("expected first applied cursor 'cursor1', got %q", applied[0].cursor)
-	}
-	if string(applied[1].cursor) != "cursor2" {
-		t.Errorf("expected second applied cursor 'cursor2', got %q", applied[1].cursor)
-	}
-}
-
 func TestWorkerLogger(t *testing.T) {
 	consumer := newFakeConsumer()
 	logs := []logEntry{}
 
 	worker := &Worker{
-		Source:     consumer,
-		Start:      es.Cursor("start"),
-		MaxBatches: 1,
+		Source: consumer,
+		Start:  es.Cursor("start"),
 		Apply: func(ctx context.Context, batch []es.Envelope, next es.Cursor) error {
 			return nil
 		},
@@ -344,14 +309,18 @@ func TestWorkerLogger(t *testing.T) {
 		},
 	}
 
-	// Add one batch
+	// Add one batch, then consumer will return empty batches
 	consumer.AddBatch([]es.Envelope{createTestEvent("1", "event1")}, es.Cursor("cursor1"))
 
-	ctx := context.Background()
+	// Use context with timeout to stop the worker after processing
+	ctx, cancel := context.WithTimeout(context.Background(), 100*time.Millisecond)
+	defer cancel()
+	
 	err := worker.Run(ctx)
 
-	if err != nil {
-		t.Fatalf("expected no error, got %v", err)
+	// Should stop due to context timeout (expected behavior)
+	if err != context.DeadlineExceeded {
+		t.Fatalf("expected context.DeadlineExceeded, got %v", err)
 	}
 
 	// Verify some logs were generated
@@ -376,23 +345,26 @@ func TestWorkerNilLogger(t *testing.T) {
 	consumer := newFakeConsumer()
 
 	worker := &Worker{
-		Source:     consumer,
-		Start:      es.Cursor("start"),
-		MaxBatches: 1,
+		Source: consumer,
+		Start:  es.Cursor("start"),
 		Apply: func(ctx context.Context, batch []es.Envelope, next es.Cursor) error {
 			return nil
 		},
 		Logger: nil, // Nil logger should not cause panic
 	}
 
-	// Add one batch
+	// Add one batch, then consumer will return empty batches
 	consumer.AddBatch([]es.Envelope{createTestEvent("1", "event1")}, es.Cursor("cursor1"))
 
-	ctx := context.Background()
+	// Use context with timeout to stop the worker after processing
+	ctx, cancel := context.WithTimeout(context.Background(), 100*time.Millisecond)
+	defer cancel()
+	
 	err := worker.Run(ctx)
 
-	if err != nil {
-		t.Fatalf("expected no error with nil logger, got %v", err)
+	// Should stop due to context timeout (expected behavior)
+	if err != context.DeadlineExceeded {
+		t.Fatalf("expected context.DeadlineExceeded with nil logger, got %v", err)
 	}
 }
 
