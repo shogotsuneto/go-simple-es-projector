@@ -151,3 +151,13 @@ The `Commit` method on the source is called after `Apply` succeeds:
 
 - Go ≥ 1.21
 - `github.com/shogotsuneto/go-simple-eventstore` for the Consumer interface
+
+## Compatibility
+
+Since both projects are in v0.0.x, patch versions may contain breaking changes. Use the following compatibility table:
+
+| go-simple-es-projector | go-simple-eventstore | Notes |
+|------------------------|---------------------|-------|
+| v0.0.1                 | v0.0.8              | Current stable combination |
+
+**⚠️ Important**: Always pin both dependencies to specific versions in your `go.mod` to avoid unexpected breaking changes during development.
