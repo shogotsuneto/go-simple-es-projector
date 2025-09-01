@@ -1,10 +1,11 @@
 # go-simple-es-projector
 
-A minimal event worker that repeatedly pulls events from an event source and invokes **user-provided projection logic**. 
+A minimal event worker that repeatedly pulls events from an event source and invokes **user-provided projection logic**.
 
 ## Responsibilities
 
 **You (the user) fully own:**
+
 - where/how you **store the checkpoint** (cursor)
 - whether to make projection + checkpoint **atomic** (e.g., a DB transaction)
 - any **DB/driver choices** (`database/sql`, `pgx`, DynamoDB SDK, etc.)
@@ -135,6 +136,7 @@ _ = r.Run(ctx)
 ## Commit semantics
 
 The `Commit` method on the source is called after `Apply` succeeds:
+
 - **Kafka**: May advance consumer group offset
 - **DynamoDB Streams**: Typically no-op (checkpoint is in your table)
 - **Postgres**: Often no-op (events are already committed to the table)
@@ -156,9 +158,9 @@ The `Commit` method on the source is called after `Apply` succeeds:
 
 Since both projects are in v0.0.x, patch versions may contain breaking changes. Use the following compatibility table:
 
-| go-simple-es-projector | go-simple-eventstore | Notes |
-|------------------------|---------------------|-------|
-| v0.0.1                 | v0.0.8              | Current stable combination |
-| unreleased             | v0.0.9              | Updated for new Envelope.Event structure |
+| go-simple-es-projector | go-simple-eventstore | Notes                                     |
+| ---------------------- | -------------------- | ----------------------------------------- |
+| unreleased             | v0.0.9               | Updated for new Envelope.Event structure  |
+| v0.0.1                 | v0.0.8               | Initial version of go-simple-es-projector |
 
 **⚠️ Important**: Always pin both dependencies to specific versions in your `go.mod` to avoid unexpected breaking changes during development.
