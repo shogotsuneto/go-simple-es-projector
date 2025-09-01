@@ -42,7 +42,6 @@ type Worker struct {
     Start      es.Cursor     // starting cursor (user loads from their store)
     BatchSize  int           // default: 512
     IdleSleep  time.Duration // default: 200ms between empty polls
-    MaxBatches int           // 0 = unlimited (useful for tests/cron)
     Logger     func(msg string, kv ...any) // optional, nil-safe
 }
 
@@ -62,7 +61,7 @@ func (w *Worker) Run(ctx context.Context) error
    - if error → return error (worker doesn't swallow apply failures)
    - `err := Source.Commit(ctx, next)` (Kafka may use this; others can no-op)
    - `cursor = next`
-   - stop on `ctx.Done()` or `MaxBatches` reached
+   - stop on `ctx.Done()`
 
 ## Usage Examples
 
@@ -146,7 +145,7 @@ The `Commit` method on the source is called after `Apply` succeeds:
 - **User-managed atomicity**: You control transactions and consistency
 - **Generic worker**: Works with any storage backend
 - **Context-aware**: Respects cancellation and timeouts
-- **Configurable**: Batch sizes, idle sleep, max batches for testing
+- **Configurable**: Batch sizes and idle sleep
 
 ## Requirements
 
