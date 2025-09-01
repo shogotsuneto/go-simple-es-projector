@@ -205,7 +205,24 @@ EVENTSTORE_URL="postgres://eventstore_user:eventstore_pass@localhost:5432/events
 
 # Projection database (target)
 PROJECTION_URL="postgres://projection_user:projection_pass@localhost:5433/projections?sslmode=disable"
+
+# Timeout for automatic stop (optional, for demo/testing)
+PROJECTOR_TIMEOUT="10"  # Run for 10 seconds then stop (useful for macOS/cross-platform compatibility)
 ```
+
+### Timeout Configuration
+
+The projector supports an optional timeout for automatic termination, useful for demos and testing:
+
+```bash
+# Run for 10 seconds then stop automatically
+PROJECTOR_TIMEOUT=10 ./projector
+
+# Run continuously (default behavior when PROJECTOR_TIMEOUT is not set)
+./projector
+```
+
+This provides cross-platform compatibility as an alternative to the `timeout` command (which is not available by default on macOS).
 
 ## Key Implementation Details
 

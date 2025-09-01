@@ -24,7 +24,7 @@ run: build ## Run the projector (runs continuously until stopped with Ctrl+C)
 
 run-once: build ## Run the projector for 10 seconds then stop
 	@echo "Running projector for 10 seconds..."
-	timeout 10 ./projector || true
+	PROJECTOR_TIMEOUT=10 ./projector
 	@echo "Projector stopped after 10 seconds"
 
 producer: build ## Run the event producer

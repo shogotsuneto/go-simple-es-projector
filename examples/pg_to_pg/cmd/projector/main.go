@@ -16,6 +16,7 @@ import (
 	"fmt"
 	"log"
 	"os"
+	"strconv"
 	"time"
 
 	"github.com/shogotsuneto/go-simple-es-projector"
@@ -51,6 +52,17 @@ func main() {
 		log.Printf("Using default PROJECTION_URL: %s", projectionURL)
 	}
 
+	// Check for timeout environment variable
+	var timeout time.Duration
+	if timeoutEnv := os.Getenv("PROJECTOR_TIMEOUT"); timeoutEnv != "" {
+		timeoutSeconds, err := strconv.Atoi(timeoutEnv)
+		if err != nil {
+			log.Fatalf("Invalid PROJECTOR_TIMEOUT value '%s': must be a number of seconds", timeoutEnv)
+		}
+		timeout = time.Duration(timeoutSeconds) * time.Second
+		log.Printf("Projector will run for %v", timeout)
+	}
+
 	// Connect to projection database
 	projectionDB, err := sql.Open("postgres", projectionURL)
 	if err != nil {
@@ -78,6 +90,14 @@ func main() {
 
 	// Load starting cursor from our checkpoint table
 	ctx := context.Background()
+	
+	// Apply timeout if specified
+	if timeout > 0 {
+		var cancel context.CancelFunc
+		ctx, cancel = context.WithTimeout(ctx, timeout)
+		defer cancel()
+	}
+	
 	cursor, err := loadCursor(ctx, projectionDB)
 	if err != nil {
 		log.Fatalf("Failed to load cursor: %v", err)
@@ -98,12 +118,20 @@ func main() {
 	}
 
 	// Run the projector
-	log.Println("Starting projector...")
-	if err := worker.Run(ctx); err != nil {
-		log.Fatalf("Projector failed: %v", err)
+	if timeout > 0 {
+		log.Printf("Starting projector with %v timeout...", timeout)
+	} else {
+		log.Println("Starting projector...")
 	}
-
-	log.Println("Projection completed successfully!")
+	
+	err = worker.Run(ctx)
+	if err == context.DeadlineExceeded {
+		log.Printf("Projector stopped after %v timeout", timeout)
+	} else if err != nil {
+		log.Fatalf("Projector failed: %v", err)
+	} else {
+		log.Println("Projection completed successfully!")
+	}
 
 	// Show results
 	if err := showResults(ctx, projectionDB); err != nil {
