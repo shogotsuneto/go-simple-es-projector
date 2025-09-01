@@ -15,12 +15,12 @@ type ApplyFunc func(ctx context.Context, batch []es.Envelope, next es.Cursor) er
 // Users fully own where/how they store the checkpoint (cursor) and whether to make
 // projection + checkpoint atomic (e.g., a DB transaction).
 type Worker struct {
-	Source     es.Consumer   // event source (Postgres, DynamoDB Streams, Kafka…)
-	Apply      ApplyFunc     // user projection + checkpoint
-	Start      es.Cursor     // starting cursor (user loads from their store)
-	BatchSize  int           // default: 256
-	IdleSleep  time.Duration // default: 500ms between empty polls
-	Logger     func(msg string, kv ...any) // optional, nil-safe
+	Source    es.Consumer                 // event source (Postgres, DynamoDB Streams, Kafka…)
+	Apply     ApplyFunc                   // user projection + checkpoint
+	Start     es.Cursor                   // starting cursor (user loads from their store)
+	BatchSize int                         // default: 256
+	IdleSleep time.Duration               // default: 500ms between empty polls
+	Logger    func(msg string, kv ...any) // optional, nil-safe
 }
 
 // Run pulls events and calls Apply with 'next' cursor after each batch.
@@ -31,14 +31,14 @@ func (w *Worker) Run(ctx context.Context) error {
 	if batchSize <= 0 {
 		batchSize = 256
 	}
-	
+
 	idleSleep := w.IdleSleep
 	if idleSleep <= 0 {
 		idleSleep = 500 * time.Millisecond
 	}
 
 	cursor := w.Start
-	
+
 	w.logf("worker starting", "batchSize", batchSize, "idleSleep", idleSleep)
 
 	for {
@@ -60,7 +60,7 @@ func (w *Worker) Run(ctx context.Context) error {
 		// If no events, sleep and continue
 		if len(batch) == 0 {
 			w.logf("no events fetched, sleeping", "idleSleep", idleSleep)
-			
+
 			select {
 			case <-ctx.Done():
 				w.logf("worker stopped due to context cancellation during idle sleep")

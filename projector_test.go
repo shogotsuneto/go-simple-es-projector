@@ -103,7 +103,7 @@ func TestWorkerDefaults(t *testing.T) {
 	// Use context with timeout to stop the worker after processing
 	ctx, cancel := context.WithTimeout(context.Background(), 100*time.Millisecond)
 	defer cancel()
-	
+
 	err := worker.Run(ctx)
 
 	// Should stop due to context timeout (expected behavior)
@@ -165,7 +165,7 @@ func TestWorkerCustomBatchSize(t *testing.T) {
 	// Use context with timeout to stop the worker after processing
 	ctx, cancel := context.WithTimeout(context.Background(), 100*time.Millisecond)
 	defer cancel()
-	
+
 	err := worker.Run(ctx)
 
 	// Should stop due to context timeout (expected behavior)
@@ -280,7 +280,7 @@ func TestWorkerContextCancellation(t *testing.T) {
 	// No batches added, so worker will idle
 
 	ctx, cancel := context.WithCancel(context.Background())
-	
+
 	// Cancel context after a short delay
 	go func() {
 		time.Sleep(25 * time.Millisecond)
@@ -315,7 +315,7 @@ func TestWorkerLogger(t *testing.T) {
 	// Use context with timeout to stop the worker after processing
 	ctx, cancel := context.WithTimeout(context.Background(), 100*time.Millisecond)
 	defer cancel()
-	
+
 	err := worker.Run(ctx)
 
 	// Should stop due to context timeout (expected behavior)
@@ -359,7 +359,7 @@ func TestWorkerNilLogger(t *testing.T) {
 	// Use context with timeout to stop the worker after processing
 	ctx, cancel := context.WithTimeout(context.Background(), 100*time.Millisecond)
 	defer cancel()
-	
+
 	err := worker.Run(ctx)
 
 	// Should stop due to context timeout (expected behavior)
