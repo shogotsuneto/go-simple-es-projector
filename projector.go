@@ -18,8 +18,8 @@ type Worker struct {
 	Source     es.Consumer   // event source (Postgres, DynamoDB Streams, Kafka…)
 	Apply      ApplyFunc     // user projection + checkpoint
 	Start      es.Cursor     // starting cursor (user loads from their store)
-	BatchSize  int           // default: 512
-	IdleSleep  time.Duration // default: 200ms between empty polls
+	BatchSize  int           // default: 256
+	IdleSleep  time.Duration // default: 500ms between empty polls
 	Logger     func(msg string, kv ...any) // optional, nil-safe
 }
 
@@ -29,12 +29,12 @@ func (w *Worker) Run(ctx context.Context) error {
 	// Set defaults
 	batchSize := w.BatchSize
 	if batchSize <= 0 {
-		batchSize = 512
+		batchSize = 256
 	}
 	
 	idleSleep := w.IdleSleep
 	if idleSleep <= 0 {
-		idleSleep = 200 * time.Millisecond
+		idleSleep = 500 * time.Millisecond
 	}
 
 	cursor := w.Start

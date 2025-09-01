@@ -120,7 +120,7 @@ func TestWorkerDefaults(t *testing.T) {
 	if string(fetchCall.cursor) != "start" {
 		t.Errorf("expected first fetch with cursor 'start', got %q", fetchCall.cursor)
 	}
-	if fetchCall.limit != 512 { // default BatchSize
+	if fetchCall.limit != 256 { // default BatchSize
 		t.Errorf("expected default batch size 512, got %d", fetchCall.limit)
 	}
 
