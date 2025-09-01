@@ -63,11 +63,9 @@ CREATE INDEX idx_product_tags_product_id ON product_tags(product_id); -- Search 
 ### Using Makefile (Recommended)
 
 ```bash
-# Start databases and run a quick demo (10 seconds)
-make demo
-
-# Or step by step:
+# Step by step:
 make up          # Start databases  
+sleep 5          # Wait for databases to be ready
 make run-once    # Run projector for 10 seconds
 make producer    # Add more events
 make run-once    # Run projector for 10 seconds again
@@ -85,6 +83,7 @@ make run         # Run projector continuously (Press Ctrl+C to stop)
 
 ```bash
 docker-compose up -d
+sleep 5  # Wait for databases to be ready
 ```
 
 This creates:
@@ -166,7 +165,7 @@ This design is typical for production event sourcing systems where projectors ru
 
 ### For Demo/Development:
 - Use `make run-once` for quick testing (auto-stops after 10 seconds)
-- Use `make demo` for a complete demonstration
+- Use `make up && sleep 5 && make run-once` for a complete demonstration
 
 ### For Production:
 - Use `make run` and manage the process lifecycle with your deployment system

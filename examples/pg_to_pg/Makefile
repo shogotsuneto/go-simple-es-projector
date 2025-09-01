@@ -40,22 +40,10 @@ status: ## Show container status
 logs: ## Show database logs
 	docker-compose logs -f
 
-# Complete workflow targets
-demo: up wait-db run-once ## Full demo: start databases, wait, then run projector for 10 seconds
-	@echo "Demo completed! The projector processed available events."
-	@echo "Try 'make producer' to add more events, then 'make run-once' to process them."
-	@echo "Or use 'make run' to start the projector continuously."
-
-wait-db: ## Wait for databases to be ready
-	@echo "Waiting for databases to be healthy..."
-	@timeout 60 bash -c 'until docker-compose exec -T eventstore-db pg_isready -U eventstore_user -d eventstore >/dev/null 2>&1; do sleep 1; done'
-	@timeout 60 bash -c 'until docker-compose exec -T projection-db pg_isready -U projection_user -d projections >/dev/null 2>&1; do sleep 1; done'
-	@echo "Databases are healthy!"
-
-full-cycle: up wait-db run-once producer run-once ## Complete cycle: start, project initial data, add events, project again
-
 # Development targets  
-dev-reset: clean up wait-db ## Reset everything and start fresh
+dev-reset: clean up ## Reset everything and start fresh
+	@echo "Waiting for databases to be ready..."
+	@sleep 5
 	@echo "Environment reset complete!"
 
 connect-eventstore: ## Connect to event store database
