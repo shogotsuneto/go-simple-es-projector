@@ -126,26 +126,51 @@ cd cmd/producer && go run main.go
 
 This adds new events to the event store that you can then project by running the projector again.
 
-### 4. View the results
+### 4. Query the projection results
 
-The example shows:
-- All projected product tags
-- Current checkpoint position
-- Example tag-based queries
+You can query the projected data directly from PostgreSQL using Docker:
 
+```bash
+# Connect to the projection database
+docker exec -it pg_to_pg-projection-db-1 psql -U projection_user -d projections
+
+# Or in one command:
+docker exec -it pg_to_pg-projection-db-1 psql -U projection_user -d projections -c "
+SELECT product_id, tag, added_by, added_at 
+FROM product_tags 
+ORDER BY product_id, tag;
+"
+
+# Check projection checkpoint
+docker exec -it pg_to_pg-projection-db-1 psql -U projection_user -d projections -c "
+SELECT projection_name, cursor_value 
+FROM projection_checkpoints;
+"
+
+# Example tag-based searches
+docker exec -it pg_to_pg-projection-db-1 psql -U projection_user -d projections -c "
+SELECT DISTINCT product_id 
+FROM product_tags 
+WHERE tag = 'electronics';
+"
+
+# Show products with multiple tags
+docker exec -it pg_to_pg-projection-db-1 psql -U projection_user -d projections -c "
+SELECT product_id, array_agg(tag) as tags 
+FROM product_tags 
+GROUP BY product_id;
+"
 ```
-=== PROJECTION RESULTS ===
-Product Tags:
-  product-123 -> electronics (by user-1 at 14:30:15)
-  product-456 -> books (by user-2 at 14:30:15)
-  product-456 -> fiction (by user-2 at 14:30:15)
-  product-789 -> computers (by user-3 at 14:30:15)
-  product-789 -> electronics (by user-3 at 14:30:15)
 
-Checkpoint: 7
-
-Example tag-based searches:
-  Products with 'electronics' tag: [product-123 product-789]
+Example output:
+```
+ product_id |      tag      | added_by | added_at 
+------------+---------------+----------+----------
+ product-123| electronics   | user-1   | 14:30:15
+ product-456| books        | user-2   | 14:30:15
+ product-456| fiction      | user-2   | 14:30:15
+ product-789| computers    | user-3   | 14:30:15
+ product-789| electronics  | user-3   | 14:30:15
 ```
 
 ## Files

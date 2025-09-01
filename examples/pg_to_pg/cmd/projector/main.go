@@ -132,11 +132,6 @@ func main() {
 	} else {
 		log.Println("Projection completed successfully!")
 	}
-
-	// Show results
-	if err := showResults(ctx, projectionDB); err != nil {
-		log.Printf("Failed to show results: %v", err)
-	}
 }
 
 // createProjectionTables sets up our projection and checkpoint tables
@@ -320,66 +315,3 @@ func createEventConsumer(eventstoreURL string) (es.Consumer, error) {
 	return consumer, nil
 }
 
-// showResults displays the projected data to demonstrate the working system
-func showResults(ctx context.Context, db *sql.DB) error {
-	log.Println("\n=== PROJECTION RESULTS ===")
-	
-	// Show all product tags
-	rows, err := db.QueryContext(ctx, 
-		`SELECT product_id, tag, added_by, added_at 
-		 FROM product_tags 
-		 ORDER BY product_id, tag`)
-	if err != nil {
-		return fmt.Errorf("failed to query product tags: %w", err)
-	}
-	defer rows.Close()
-
-	log.Println("Product Tags:")
-	for rows.Next() {
-		var productID, tag, addedBy string
-		var addedAt time.Time
-		if err := rows.Scan(&productID, &tag, &addedBy, &addedAt); err != nil {
-			return fmt.Errorf("failed to scan row: %w", err)
-		}
-		log.Printf("  %s -> %s (by %s at %s)", productID, tag, addedBy, addedAt.Format("15:04:05"))
-	}
-
-	// Show checkpoint
-	var cursor []byte
-	err = db.QueryRowContext(ctx,
-		`SELECT cursor_value FROM projection_checkpoints WHERE projection_name = $1`,
-		"product_tags",
-	).Scan(&cursor)
-	
-	if err == sql.ErrNoRows {
-		log.Println("Checkpoint: None")
-	} else if err != nil {
-		return fmt.Errorf("failed to load checkpoint: %w", err)
-	} else {
-		log.Printf("Checkpoint: %s", string(cursor))
-	}
-
-	// Show example queries
-	log.Println("\nExample tag-based searches:")
-	
-	// Products with 'electronics' tag
-	var productIDs []string
-	rows, err = db.QueryContext(ctx, 
-		`SELECT DISTINCT product_id FROM product_tags WHERE tag = $1`, 
-		"electronics")
-	if err != nil {
-		return fmt.Errorf("failed to query electronics products: %w", err)
-	}
-	defer rows.Close()
-	
-	for rows.Next() {
-		var productID string
-		if err := rows.Scan(&productID); err != nil {
-			return fmt.Errorf("failed to scan product ID: %w", err)
-		}
-		productIDs = append(productIDs, productID)
-	}
-	log.Printf("  Products with 'electronics' tag: %v", productIDs)
-
-	return nil
-}
