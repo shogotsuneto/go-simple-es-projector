@@ -9,13 +9,12 @@ The example uses **two separate PostgreSQL databases**:
 1. **Event Store Database** (`eventstore-db:5432`): Contains the source events using `go-simple-eventstore`
 2. **Projection Database** (`projection-db:5433`): Contains the projected read model and checkpoints
 
-This separation demonstrates best practices for CQRS/Event Sourcing where the event store and read models are isolated.
+This separation demonstrates CQRS/Event Sourcing where the event store and read models are isolated.
 
 ## Features Demonstrated
 
-- ✅ Real `go-simple-eventstore` integration (not mocked)
+- ✅ `go-simple-eventstore` integration
 - ✅ Separate databases for event store vs projections
-- ✅ Docker Compose setup with PostgreSQL
 - ✅ Atomic projection + checkpoint persistence
 - ✅ Idempotent event handling (`ON CONFLICT DO NOTHING`)
 - ✅ Sample events pre-loaded for immediate demonstration
@@ -75,7 +74,7 @@ make down        # Stop databases
 make run         # Run projector continuously (Press Ctrl+C to stop)
 ```
 
-**Note:** The projector runs continuously by design, polling for new events every 2 seconds. Use `run-once` for demos or `run` for production scenarios where you want continuous processing.
+**Note:** The projector runs continuously by design, polling for new events every 2 seconds. Use `run-once` for demos or `run` for continuous processing.
 
 ### Manual Steps
 
@@ -83,7 +82,6 @@ make run         # Run projector continuously (Press Ctrl+C to stop)
 
 ```bash
 docker-compose up -d
-sleep 5  # Wait for databases to be ready
 ```
 
 This creates:
@@ -128,8 +126,6 @@ cd cmd/producer && go run main.go
 
 This adds new events to the event store that you can then project by running the projector again.
 
-**Note:** In a production environment, the projector would typically run continuously as a service, automatically processing new events as they arrive.
-
 ### 4. View the results
 
 The example shows:
@@ -151,25 +147,6 @@ Checkpoint: 7
 Example tag-based searches:
   Products with 'electronics' tag: [product-123 product-789]
 ```
-
-## Continuous Processing Behavior
-
-**Important:** The projector is designed for continuous operation and does NOT exit automatically. It:
-
-- ✅ Processes all available events in batches
-- ✅ Saves checkpoints after each batch
-- ✅ **Continues polling for new events every 2 seconds**
-- ✅ Only stops when explicitly interrupted (Ctrl+C) or context cancelled
-
-This design is typical for production event sourcing systems where projectors run as long-lived services.
-
-### For Demo/Development:
-- Use `make run-once` for quick testing (auto-stops after 10 seconds)
-- Use `make up && sleep 5 && make run-once` for a complete demonstration
-
-### For Production:
-- Use `make run` and manage the process lifecycle with your deployment system
-- The projector will continuously process new events as they arrive
 
 ## Files
 
@@ -261,15 +238,3 @@ ON CONFLICT (projection_name) DO UPDATE SET cursor_value = EXCLUDED.cursor_value
 ```bash
 docker-compose down -v  # Remove containers and volumes
 ```
-
-## Real-World Usage
-
-This example demonstrates patterns suitable for production:
-
-1. **Separate Databases**: Event store and read models are isolated
-2. **Atomic Operations**: Projections and checkpoints are transactionally consistent  
-3. **Idempotent Handling**: Safe replay of events
-4. **Configurable**: Environment-based configuration
-5. **Observable**: Structured logging of projection progress
-
-Adapt the event types, schema, and Apply function for your specific domain events and read model requirements.
