@@ -10,9 +10,9 @@ import (
 	"os"
 	"time"
 
+	_ "github.com/lib/pq" // PostgreSQL driver
 	es "github.com/shogotsuneto/go-simple-eventstore"
 	"github.com/shogotsuneto/go-simple-eventstore/postgres"
-	_ "github.com/lib/pq" // PostgreSQL driver
 )
 
 // Example event types - duplicated here for simplicity

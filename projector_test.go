@@ -74,9 +74,11 @@ func (f *fakeConsumer) Commit(ctx context.Context, cursor es.Cursor) error {
 // Helper to create test events
 func createTestEvent(eventID string, data string) es.Envelope {
 	return es.Envelope{
-		EventID: eventID,
-		Type:    "test.event",
-		Data:    []byte(data),
+		Event: es.Event{
+			ID:   eventID,
+			Type: "test.event",
+			Data: []byte(data),
+		},
 	}
 }
 

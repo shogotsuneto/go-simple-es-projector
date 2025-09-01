@@ -159,5 +159,6 @@ Since both projects are in v0.0.x, patch versions may contain breaking changes. 
 | go-simple-es-projector | go-simple-eventstore | Notes |
 |------------------------|---------------------|-------|
 | v0.0.1                 | v0.0.8              | Current stable combination |
+| unreleased             | v0.0.9              | Updated for new Envelope.Event structure |
 
 **⚠️ Important**: Always pin both dependencies to specific versions in your `go.mod` to avoid unexpected breaking changes during development.

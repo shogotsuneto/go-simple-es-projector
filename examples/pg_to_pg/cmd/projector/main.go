@@ -19,10 +19,10 @@ import (
 	"strconv"
 	"time"
 
+	_ "github.com/lib/pq" // PostgreSQL driver
 	"github.com/shogotsuneto/go-simple-es-projector"
 	es "github.com/shogotsuneto/go-simple-eventstore"
 	"github.com/shogotsuneto/go-simple-eventstore/postgres"
-	_ "github.com/lib/pq" // PostgreSQL driver
 )
 
 // Example event types
@@ -90,14 +90,14 @@ func main() {
 
 	// Load starting cursor from our checkpoint table
 	ctx := context.Background()
-	
+
 	// Apply timeout if specified
 	if timeout > 0 {
 		var cancel context.CancelFunc
 		ctx, cancel = context.WithTimeout(ctx, timeout)
 		defer cancel()
 	}
-	
+
 	cursor, err := loadCursor(ctx, projectionDB)
 	if err != nil {
 		log.Fatalf("Failed to load cursor: %v", err)
@@ -123,7 +123,7 @@ func main() {
 	} else {
 		log.Println("Starting projector...")
 	}
-	
+
 	err = worker.Run(ctx)
 	if err == context.DeadlineExceeded {
 		log.Printf("Projector stopped after %v timeout", timeout)
@@ -217,7 +217,7 @@ func createApplyFunc(db *sql.DB) projector.ApplyFunc {
 		// Process each event in the batch
 		for _, envelope := range batch {
 			if err := projectEventTx(ctx, tx, envelope); err != nil {
-				return fmt.Errorf("failed to project event %s: %w", envelope.EventID, err)
+				return fmt.Errorf("failed to project event %s: %w", envelope.Event.ID, err)
 			}
 		}
 
@@ -238,24 +238,24 @@ func createApplyFunc(db *sql.DB) projector.ApplyFunc {
 
 // projectEventTx projects a single event within a transaction
 func projectEventTx(ctx context.Context, tx *sql.Tx, envelope es.Envelope) error {
-	switch envelope.Type {
+	switch envelope.Event.Type {
 	case "product.tag_added":
 		var event TagAdded
-		if err := json.Unmarshal(envelope.Data, &event); err != nil {
+		if err := json.Unmarshal(envelope.Event.Data, &event); err != nil {
 			return fmt.Errorf("failed to unmarshal TagAdded: %w", err)
 		}
 		return addProductTagTx(ctx, tx, event.ProductID, event.Tag, event.UserID)
 
 	case "product.tag_removed":
 		var event TagRemoved
-		if err := json.Unmarshal(envelope.Data, &event); err != nil {
+		if err := json.Unmarshal(envelope.Event.Data, &event); err != nil {
 			return fmt.Errorf("failed to unmarshal TagRemoved: %w", err)
 		}
 		return removeProductTagTx(ctx, tx, event.ProductID, event.Tag)
 
 	default:
 		// Unknown event type - skip (be lenient)
-		log.Printf("Skipping unknown event type: %s", envelope.Type)
+		log.Printf("Skipping unknown event type: %s", envelope.Event.Type)
 		return nil
 	}
 }
@@ -314,4 +314,3 @@ func createEventConsumer(eventstoreURL string) (es.Consumer, error) {
 
 	return consumer, nil
 }
-
