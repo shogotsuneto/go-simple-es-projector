@@ -25,7 +25,7 @@ producer: build ## Run the event producer
 	./producer
 
 build: ## Build the binaries
-	go build -o projector main.go
+	cd cmd/projector && go build -o ../../projector main.go
 	cd cmd/producer && go build -o ../../producer main.go
 
 status: ## Show container status

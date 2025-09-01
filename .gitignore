@@ -34,3 +34,5 @@ go.work.sum
 # Example binaries
 examples/*/main
 examples/*/pg_to_pg
+examples/*/projector
+examples/*/producer
